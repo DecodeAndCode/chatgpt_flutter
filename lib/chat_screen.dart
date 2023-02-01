@@ -20,45 +20,72 @@ class _ChatScreenState extends State<ChatScreen> {
 
   StreamSubscription? _subscription;
   bool _istyping = false;
+  bool _isImageSearch = false;
 
   @override
   void initState() {
     super.initState();
-    chatGPT = ChatGPT.instance;
+    chatGPT = ChatGPT.instance.builder(
+      "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",
+    );
   }
 
   @override
   void dispose() {
+    chatGPT!.genImgClose();
     _subscription?.cancel();
     super.dispose();
   }
 
   void _sendMessage() {
-    ChatMessage message = ChatMessage(text: _controller.text, sender: "user");
+    if (_controller.text.isEmpty) return;
+    ChatMessage message = ChatMessage(
+      text: _controller.text,
+      sender: "user",
+      isImage: false,
+    );
 
     setState(() {
       _messages.insert(0, message);
       _istyping = true;
     });
 
-    _controller.clear();
+    if (_isImageSearch) {
+      final request = GenerateImage(message.text, 1, size: "256x256");
 
-    final request = CompleteReq(
-        prompt: message.text, model: kTranslateModelV3, max_tokens: 200);
-
-    _subscription = chatGPT!
-        .builder("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",
-            orgId: "")
-        .onCompleteStream(request: request)
-        .listen((response) {
-      Vx.log(response!.choices[0].text);
-      ChatMessage botMessage =
-          ChatMessage(text: response.choices[0].text, sender: "bot");
-
-      setState(() {
-        _istyping = false;
-        _messages.insert(0, botMessage);
+      _subscription = chatGPT!
+          .generateImageStream(request)
+          .asBroadcastStream()
+          .listen((response) {
+        Vx.log(response.data!.last!.url!);
+        insertNewData(response.data!.last!.url!, isImage: true);
       });
+    } else {
+      _controller.clear();
+
+      final request = CompleteReq(
+          prompt: message.text, model: kTranslateModelV3, max_tokens: 10000);
+
+      _subscription = chatGPT!
+          .onCompleteStream(request: request)
+          .asBroadcastStream()
+          .listen((response) {
+        Vx.log(response!.choices[0].text);
+        insertNewData(response.choices[0].text, isImage: false);
+      });
+    }
+  }
+
+  void insertNewData(String response, {bool isImage = false}) {
+    ChatMessage botMessage = ChatMessage(
+      text: response,
+      sender: "bot",
+      isImage: isImage,
+    );
+
+    setState(() {
+      _istyping = false;
+      _messages.insert(0, botMessage);
     });
   }
 
@@ -69,14 +96,27 @@ class _ChatScreenState extends State<ChatScreen> {
           child: TextField(
             controller: _controller,
             onSubmitted: (value) => _sendMessage(),
-            decoration:
-                const InputDecoration.collapsed(hintText: "Send me something"),
+            decoration: const InputDecoration.collapsed(
+                hintText: "Question/Description"),
           ),
         ),
-        IconButton(
-          icon: const Icon(Icons.send),
-          onPressed: () => _sendMessage(),
-        )
+        ButtonBar(
+          children: [
+            IconButton(
+              icon: const Icon(Icons.send),
+              onPressed: () {
+                _isImageSearch = false;
+                _sendMessage();
+              },
+            ),
+            TextButton(
+                onPressed: () {
+                  _isImageSearch = true;
+                  _sendMessage();
+                },
+                child: const Text("Generate Image"))
+          ],
+        ),
       ],
     ).px16();
   }
