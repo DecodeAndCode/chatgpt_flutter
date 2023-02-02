@@ -26,7 +26,7 @@ class _ChatScreenState extends State<ChatScreen> {
   void initState() {
     super.initState();
     chatGPT = ChatGPT.instance.builder(
-      "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",
+      "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",
     );
   }
 
@@ -50,6 +50,8 @@ class _ChatScreenState extends State<ChatScreen> {
       _istyping = true;
     });
 
+    _controller.clear();
+
     if (_isImageSearch) {
       final request = GenerateImage(message.text, 1, size: "256x256");
 
@@ -61,10 +63,8 @@ class _ChatScreenState extends State<ChatScreen> {
         insertNewData(response.data!.last!.url!, isImage: true);
       });
     } else {
-      _controller.clear();
-
       final request = CompleteReq(
-          prompt: message.text, model: kTranslateModelV3, max_tokens: 10000);
+          prompt: message.text, model: kTranslateModelV3, max_tokens: 1000);
 
       _subscription = chatGPT!
           .onCompleteStream(request: request)
